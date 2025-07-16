@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Popup</title>
+    <style>
+        body {
+            width: 350px;
+            min-height: 400px;
+            margin: 0;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        .debug-info {
+            background: #f0f0f0;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .error {
+            background: #ffebee;
+            color: #c62828;
+        }
+        .success {
+            background: #e8f5e8;
+            color: #2e7d32;
+        }
+    </style>
+</head>
+<body>
+    <h1>Account Helper Debug</h1>
+    <div id="debug-info"></div>
+    
+    <script>
+        const debugInfo = document.getElementById('debug-info');
+        
+        function addDebugInfo(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `debug-info ${type}`;
+            div.textContent = message;
+            debugInfo.appendChild(div);
+        }
+        
+        // 检查基础 API
+        addDebugInfo('Chrome APIs available:');
+        addDebugInfo(`- chrome: ${typeof chrome}`);
+        addDebugInfo(`- chrome.storage: ${typeof chrome?.storage}`);
+        addDebugInfo(`- chrome.runtime: ${typeof chrome?.runtime}`);
+        
+        // 测试存储
+        if (chrome?.storage) {
+            chrome.storage.sync.get(['accounts'], (result) => {
+                addDebugInfo(`Storage test: ${JSON.stringify(result)}`, 'success');
+            });
+        } else {
+            addDebugInfo('Chrome storage API not available', 'error');
+        }
+        
+        // 测试消息传递
+        if (chrome?.runtime) {
+            chrome.runtime.sendMessage({action: 'getSettings'}, (response) => {
+                if (chrome.runtime.lastError) {
+                    addDebugInfo(`Message error: ${chrome.runtime.lastError.message}`, 'error');
+                } else {
+                    addDebugInfo(`Message response: ${JSON.stringify(response)}`, 'success');
+                }
+            });
+        } else {
+            addDebugInfo('Chrome runtime API not available', 'error');
+        }
+        
+        // 检查文件加载
+        addDebugInfo(`Current URL: ${window.location.href}`);
+        addDebugInfo(`Document ready state: ${document.readyState}`);
+        
+        // 尝试加载 Vue
+        try {
+            // 这里应该能访问到 Vue 相关的代码
+            addDebugInfo('Checking for Vue...', 'info');
+        } catch (error) {
+            addDebugInfo(`Vue error: ${error.message}`, 'error');
+        }
+    </script>
+</body>
+</html>
