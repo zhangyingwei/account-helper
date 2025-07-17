@@ -152,7 +152,7 @@ class BackgroundScript {
       }
     } catch (error) {
       console.error('Error handling message:', error)
-      sendResponse({ error: error.message })
+      sendResponse({ error: (error as Error).message })
     }
   }
 
@@ -180,7 +180,7 @@ class BackgroundScript {
 
       sendResponse({ accounts: filteredAccounts })
     } catch (error) {
-      sendResponse({ error: error.message })
+      sendResponse({ error: (error as Error).message })
     }
   }
 
@@ -212,7 +212,7 @@ class BackgroundScript {
 
       sendResponse({ success: true })
     } catch (error) {
-      sendResponse({ error: error.message })
+      sendResponse({ error: (error as Error).message })
     }
   }
 
@@ -221,7 +221,7 @@ class BackgroundScript {
       const accounts = await StorageService.getAccounts()
       sendResponse({ accounts })
     } catch (error) {
-      sendResponse({ error: error.message })
+      sendResponse({ error: (error as Error).message })
     }
   }
 
@@ -249,7 +249,7 @@ class BackgroundScript {
       await StorageService.saveAccounts(accounts)
       sendResponse({ success: true })
     } catch (error) {
-      sendResponse({ error: error.message })
+      sendResponse({ error: (error as Error).message })
     }
   }
 
@@ -261,7 +261,7 @@ class BackgroundScript {
       await StorageService.saveAccounts(filteredAccounts)
       sendResponse({ success: true })
     } catch (error) {
-      sendResponse({ error: error.message })
+      sendResponse({ error: (error as Error).message })
     }
   }
 
@@ -270,7 +270,7 @@ class BackgroundScript {
       const settings = await StorageService.getSettings()
       sendResponse({ settings })
     } catch (error) {
-      sendResponse({ error: error.message })
+      sendResponse({ error: (error as Error).message })
     }
   }
 
@@ -279,7 +279,7 @@ class BackgroundScript {
       await StorageService.saveSettings(message.data)
       sendResponse({ success: true })
     } catch (error) {
-      sendResponse({ error: error.message })
+      sendResponse({ error: (error as Error).message })
     }
   }
 
@@ -296,7 +296,7 @@ class BackgroundScript {
         sendResponse({ error: 'Account not found' })
       }
     } catch (error) {
-      sendResponse({ error: error.message })
+      sendResponse({ error: (error as Error).message })
     }
   }
 
@@ -311,8 +311,8 @@ class BackgroundScript {
   }
 
   private handleTabUpdated(
-    tabId: number, 
-    changeInfo: chrome.tabs.TabChangeInfo, 
+    tabId: number,
+    changeInfo: any,
     tab: chrome.tabs.Tab
   ) {
     // 当页面完成加载时，可以检查是否为登录页面

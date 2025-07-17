@@ -23,9 +23,17 @@
     </div>
 
     <div v-else class="accounts-section">
+      <!-- 调试信息 -->
+      <div class="debug-info" style="background: #f0f0f0; padding: 8px; margin-bottom: 8px; font-size: 12px;">
+        Store accounts: {{ accounts.length }} |
+        Filtered accounts: {{ filteredAccounts.length }} |
+        Search: "{{ searchQuery }}"
+      </div>
+
       <div v-if="filteredAccounts.length === 0" class="no-accounts">
         <p>暂无账号</p>
         <button @click="showAddForm = true" class="add-btn">添加账号</button>
+        <button @click="forceRefresh" class="add-btn" style="margin-left: 8px;">刷新</button>
       </div>
       
       <div v-else class="accounts-list">
@@ -38,7 +46,7 @@
           <div class="account-info">
             <div class="account-name">{{ account.name }}</div>
             <div class="account-username">{{ account.username }}</div>
-            <div class="account-group">{{ account.group }}</div>
+            <div v-if="account.group" class="account-group">{{ account.group }}</div>
           </div>
           <div class="account-actions">
             <button @click.stop="editAccount(account)" class="edit-btn">✏️</button>
@@ -113,6 +121,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useAccountStore } from '@/stores/account'
 import { useAuthStore } from '@/stores/auth'
 import type { Account } from '@/shared/types'
@@ -120,6 +129,7 @@ import AuthModal from './components/AuthModal.vue'
 
 const accountStore = useAccountStore()
 const authStore = useAuthStore()
+const { accounts } = storeToRefs(accountStore)
 const searchQuery = ref('')
 const showAddForm = ref(false)
 const editingAccount = ref<Account | null>(null)
@@ -136,12 +146,12 @@ const formData = ref({
 
 const filteredAccounts = computed(() => {
   if (!searchQuery.value) {
-    return accountStore.accounts
+    return accounts.value
   }
-  return accountStore.accounts.filter(account => 
+  return accounts.value.filter(account =>
     account.name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
     account.username.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-    account.group.toLowerCase().includes(searchQuery.value.toLowerCase())
+    (account.group && account.group.toLowerCase().includes(searchQuery.value.toLowerCase()))
   )
 })
 
@@ -176,19 +186,60 @@ const editAccount = (account: Account) => {
   }
 }
 
-const deleteAccount = (id: string) => {
+const deleteAccount = async (id: string) => {
   if (confirm('确定要删除这个账号吗？')) {
-    accountStore.deleteAccount(id)
+    try {
+      await accountStore.deleteAccount(id)
+      // 删除成功后重新加载账号列表
+      await accountStore.loadAccounts()
+    } catch (error) {
+      console.error('Failed to delete account:', error)
+      alert('删除账号失败：' + (error as Error).message)
+    }
   }
 }
 
-const saveAccount = () => {
-  if (editingAccount.value) {
-    accountStore.updateAccount(editingAccount.value.id, formData.value)
-  } else {
-    accountStore.addAccount(formData.value)
+const saveAccount = async () => {
+  try {
+    console.log('Saving account with form data:', formData.value)
+
+    // 基本表单验证
+    if (!formData.value.name.trim()) {
+      alert('请输入账号名称')
+      return
+    }
+    if (!formData.value.username.trim()) {
+      alert('请输入用户名')
+      return
+    }
+    if (!formData.value.password.trim()) {
+      alert('请输入密码')
+      return
+    }
+
+    if (editingAccount.value) {
+      console.log('Updating existing account:', editingAccount.value.id)
+      await accountStore.updateAccount(editingAccount.value.id, formData.value)
+    } else {
+      console.log('Adding new account')
+      await accountStore.addAccount(formData.value)
+    }
+
+    console.log('Account operation completed')
+    // 不需要重新加载，因为store中的数据已经更新
+    // await accountStore.loadAccounts()
+    console.log('Current accounts in store:', accountStore.accounts.length)
+    closeForm()
+  } catch (error) {
+    console.error('Failed to save account:', error)
+    alert('保存账号失败：' + (error as Error).message)
   }
-  closeForm()
+}
+
+const forceRefresh = async () => {
+  console.log('Force refreshing accounts...')
+  await accountStore.loadAccounts()
+  console.log('Force refresh completed, accounts:', accountStore.accounts.length)
 }
 
 const closeForm = () => {

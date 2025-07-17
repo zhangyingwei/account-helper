@@ -5,7 +5,18 @@ import vue from '@vitejs/plugin-vue'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [
+    vue({
+      // 禁用Vue的导出助手
+      customElement: false,
+      template: {
+        compilerOptions: {
+          hoistStatic: false,
+          cacheHandlers: false
+        }
+      }
+    })
+  ],
   build: {
     rollupOptions: {
       input: {
@@ -14,18 +25,48 @@ export default defineConfig({
         content: resolve(__dirname, 'src/content/content.ts'),
         background: resolve(__dirname, 'src/background/background.ts')
       },
+      external: (id) => {
+        // 不要将Vue导出助手作为外部依赖
+        return false
+      },
       output: {
         entryFileNames: (chunkInfo) => {
           // 为不同类型的文件使用不同的命名策略
           if (chunkInfo.name === 'content' || chunkInfo.name === 'background') {
             return '[name].js'
           }
-          return 'assets/[name]-[hash].js'
+          // 处理以下划线开头的文件名
+          let name = chunkInfo.name || 'entry'
+          if (name.startsWith('_')) {
+            name = name.substring(1)
+          }
+          if (name.includes('plugin-vue')) {
+            name = 'vue-helper'
+          }
+          return `assets/${name}-[hash].js`
         },
         chunkFileNames: (chunkInfo) => {
           // 避免以下划线开头的文件名
-          const name = chunkInfo.name?.startsWith('_') ? chunkInfo.name.substring(1) : chunkInfo.name
+          let name = chunkInfo.name || 'chunk'
+          if (name.startsWith('_')) {
+            name = name.substring(1)
+          }
+          // 特殊处理Vue插件文件
+          if (name.includes('plugin-vue')) {
+            name = 'vue-helper'
+          }
           return `assets/${name}-[hash].js`
+        },
+        manualChunks: (id) => {
+          // 将Vue相关的代码打包到一个不以下划线开头的chunk中
+          if (id.includes('plugin-vue') || id.includes('vue/dist')) {
+            return 'vue-helper'
+          }
+          // 强制内联Vue导出助手
+          if (id.includes('_plugin-vue_export-helper')) {
+            return undefined // 返回undefined会内联到主chunk中
+          }
+          return undefined
         },
         assetFileNames: (assetInfo) => {
           // CSS 文件直接放在根目录，不使用 hash
@@ -42,24 +83,7 @@ export default defineConfig({
     emptyOutDir: true,
     // 确保生成的代码兼容 Chrome 扩展环境
     target: 'es2020',
-    minify: false, // 开发时不压缩，便于调试
-    rollupOptions: {
-      ...this.rollupOptions,
-      output: {
-        ...this.rollupOptions?.output,
-        format: 'es',
-        // 为 service worker 生成单独的文件，不使用动态导入
-        manualChunks: (id) => {
-          if (id.includes('background')) {
-            return 'background'
-          }
-          if (id.includes('content')) {
-            return 'content'
-          }
-          return undefined
-        }
-      }
-    }
+    minify: false // 开发时不压缩，便于调试
   },
   resolve: {
     alias: {

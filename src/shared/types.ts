@@ -7,6 +7,7 @@ export interface Account {
   domain: string
   createTime: number
   lastUsed: number
+  encrypted?: boolean // 标记是否已加密
 }
 
 export interface AccountFormData {

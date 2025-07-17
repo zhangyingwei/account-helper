@@ -9,47 +9,57 @@
       <!-- 账号管理 -->
       <section class="section">
         <h2>账号管理</h2>
-        
-        <div class="section-actions">
-          <button @click="showAddForm = true" class="btn btn-primary">
-            + 添加账号
-          </button>
-          <button @click="exportAccounts" class="btn btn-secondary">
-            导出账号
-          </button>
-          <button @click="importAccounts" class="btn btn-secondary">
-            导入账号
-          </button>
+
+        <!-- 认证状态提示 -->
+        <div v-if="settings.encryptionEnabled && authStore.hasPassword && !authStore.isAuthenticated" class="auth-warning">
+          <div class="warning-content">
+            <p>🔒 需要输入主密码才能访问账号数据</p>
+            <button @click="requestAuthentication" class="btn btn-primary">输入密码</button>
+          </div>
         </div>
 
-        <div class="accounts-table">
-          <table v-if="accounts.length > 0">
-            <thead>
-              <tr>
-                <th>名称</th>
-                <th>用户名</th>
-                <th>分组</th>
-                <th>域名</th>
-                <th>最后使用</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="account in accounts" :key="account.id">
-                <td>{{ account.name }}</td>
-                <td>{{ account.username }}</td>
-                <td>{{ account.group || '-' }}</td>
-                <td>{{ account.domain || '所有域名' }}</td>
-                <td>{{ formatDate(account.lastUsed) }}</td>
-                <td>
-                  <button @click="editAccount(account)" class="btn-small">编辑</button>
-                  <button @click="deleteAccount(account.id)" class="btn-small btn-danger">删除</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <div v-else class="no-data">
-            <p>暂无账号数据</p>
+        <div v-else>
+          <div class="section-actions">
+            <button @click="showAddForm = true" class="btn btn-primary">
+              + 添加账号
+            </button>
+            <button @click="exportAccounts" class="btn btn-secondary">
+              导出账号
+            </button>
+            <button @click="importAccounts" class="btn btn-secondary">
+              导入账号
+            </button>
+          </div>
+
+          <div class="accounts-table">
+            <table v-if="accounts.length > 0">
+              <thead>
+                <tr>
+                  <th>名称</th>
+                  <th>用户名</th>
+                  <th>分组</th>
+                  <th>域名</th>
+                  <th>最后使用</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="account in accounts" :key="account.id">
+                  <td>{{ account.name }}</td>
+                  <td>{{ account.username }}</td>
+                  <td>{{ account.group || '-' }}</td>
+                  <td>{{ account.domain || '所有域名' }}</td>
+                  <td>{{ formatDate(account.lastUsed) }}</td>
+                  <td>
+                    <button @click="editAccount(account)" class="btn-small">编辑</button>
+                    <button @click="deleteAccount(account.id)" class="btn-small btn-danger">删除</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-else class="no-data">
+              <p>暂无账号数据</p>
+            </div>
           </div>
         </div>
       </section>
@@ -228,10 +238,12 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useAccountStore } from '@/stores/account'
+import { useAuthStore } from '@/stores/auth'
 import { StorageService } from '@/shared/storage'
 import type { Account, Settings } from '@/shared/types'
 
 const accountStore = useAccountStore()
+const authStore = useAuthStore()
 const accounts = ref<Account[]>([])
 const settings = ref<Settings>({
   autoDetection: true,
@@ -242,6 +254,10 @@ const settings = ref<Settings>({
 const showAddForm = ref(false)
 const editingAccount = ref<Account | null>(null)
 const fileInput = ref<HTMLInputElement>()
+const encryptionLoading = ref(false)
+const showSetMasterPassword = ref(false)
+const showChangeMasterPassword = ref(false)
+const showDisableEncryption = ref(false)
 
 const formData = ref({
   name: '',
@@ -253,10 +269,28 @@ const formData = ref({
 
 const loadData = async () => {
   try {
-    accounts.value = await StorageService.getAccounts()
+    // 先加载设置
     settings.value = await StorageService.getSettings()
+
+    // 检查认证状态
+    await authStore.checkMasterPassword()
+
+    // 如果启用了加密但未认证，需要先认证
+    if (settings.value.encryptionEnabled && authStore.hasPassword && !authStore.isAuthenticated) {
+      console.log('Encryption enabled but not authenticated')
+      accounts.value = []
+      return
+    }
+
+    // 加载账号数据
+    if (settings.value.encryptionEnabled && authStore.isAuthenticated) {
+      accounts.value = await StorageService.getAccounts(authStore.masterPassword)
+    } else {
+      accounts.value = await StorageService.getAccounts()
+    }
   } catch (error) {
     console.error('Failed to load data:', error)
+    accounts.value = []
   }
 }
 
@@ -373,6 +407,53 @@ const clearAllData = async () => {
         console.error('Failed to clear data:', error)
         alert('清除数据失败')
       }
+    }
+  }
+}
+
+const handleEncryptionToggle = async () => {
+  if (settings.value.encryptionEnabled) {
+    // 启用加密
+    if (!authStore.hasPassword) {
+      showSetMasterPassword.value = true
+    }
+  } else {
+    // 禁用加密
+    if (authStore.hasPassword) {
+      if (confirm('禁用加密将使用明文存储账号信息，确定继续吗？')) {
+        try {
+          encryptionLoading.value = true
+          // 需要当前密码来禁用加密
+          const password = prompt('请输入当前主密码以禁用加密：')
+          if (password) {
+            await authStore.disableEncryption(password)
+            await loadData()
+          } else {
+            settings.value.encryptionEnabled = true // 回滚
+          }
+        } catch (error) {
+          console.error('Failed to disable encryption:', error)
+          alert('禁用加密失败：' + (error as Error).message)
+          settings.value.encryptionEnabled = true // 回滚
+        } finally {
+          encryptionLoading.value = false
+        }
+      } else {
+        settings.value.encryptionEnabled = true // 回滚
+      }
+    }
+  }
+  await saveSettings()
+}
+
+const requestAuthentication = async () => {
+  const password = prompt('请输入主密码：')
+  if (password) {
+    try {
+      await authStore.authenticate(password)
+      await loadData()
+    } catch (error) {
+      alert('密码错误：' + (error as Error).message)
     }
   }
 }
@@ -511,6 +592,24 @@ onMounted(() => {
   text-align: center;
   padding: 48px;
   color: #6c757d;
+}
+
+.auth-warning {
+  background-color: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 6px;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.warning-content {
+  text-align: center;
+}
+
+.warning-content p {
+  margin: 0 0 16px 0;
+  color: #856404;
+  font-size: 16px;
 }
 
 .setting-item {

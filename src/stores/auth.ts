@@ -102,19 +102,31 @@ export const useAuthStore = defineStore('auth', () => {
 
       // 获取当前账号数据
       const accounts = await StorageService.getAccounts(oldPassword)
-      
+
       // 设置新密码
       await StorageService.setMasterPassword(newPassword)
-      
+
       // 用新密码重新加密数据
       await StorageService.saveAccounts(accounts, newPassword)
-      
+
       masterPassword.value = newPassword
     } catch (error) {
       console.error('Failed to change master password:', error)
       throw error
     } finally {
       loading.value = false
+    }
+  }
+
+  const clearMasterPassword = async () => {
+    try {
+      await StorageService.clearMasterPassword()
+      isAuthenticated.value = false
+      hasPassword.value = false
+      masterPassword.value = ''
+    } catch (error) {
+      console.error('Failed to clear master password:', error)
+      throw error
     }
   }
 
@@ -128,6 +140,7 @@ export const useAuthStore = defineStore('auth', () => {
     authenticate,
     logout,
     disableEncryption,
-    changeMasterPassword
+    changeMasterPassword,
+    clearMasterPassword
   }
 })

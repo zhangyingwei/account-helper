@@ -74,7 +74,7 @@ export class LoginDetector {
       result.isLoginPage = true
       result.usernameField = usernameField
       result.passwordField = passwordField
-      result.form = form
+      result.form = form || undefined
     }
 
     return result

@@ -198,9 +198,9 @@ const handleSubmit = async () => {
     }
   } catch (error) {
     if (props.isSetup) {
-      passwordError.value = error.message
+      passwordError.value = (error as Error).message
     } else {
-      authError.value = error.message
+      authError.value = (error as Error).message
     }
   } finally {
     loading.value = false

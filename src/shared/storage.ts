@@ -1,77 +1,46 @@
 import type { Account, Settings } from './types'
-import { CryptoService } from './crypto'
+import { IndexedDBService } from './indexeddb'
 
 export class StorageService {
-  private static readonly ACCOUNTS_KEY = 'accounts'
-  private static readonly SETTINGS_KEY = 'settings'
-  private static readonly ENCRYPTED_ACCOUNTS_KEY = 'encrypted_accounts'
-  private static readonly MASTER_PASSWORD_HASH_KEY = 'master_password_hash'
-
+  /**
+   * 获取所有账号
+   */
   static async getAccounts(masterPassword?: string): Promise<Account[]> {
     try {
-      const settings = await this.getSettings()
-
-      if (settings.encryptionEnabled && masterPassword) {
-        // 获取加密的账号数据
-        const result = await chrome.storage.sync.get([this.ENCRYPTED_ACCOUNTS_KEY])
-        const encryptedData = result[this.ENCRYPTED_ACCOUNTS_KEY]
-
-        if (encryptedData) {
-          const decryptedData = await CryptoService.decrypt(encryptedData, masterPassword)
-          return JSON.parse(decryptedData)
-        }
-        return []
-      } else {
-        // 获取未加密的账号数据
-        const result = await chrome.storage.sync.get([this.ACCOUNTS_KEY])
-        return result[this.ACCOUNTS_KEY] || []
-      }
+      console.log('StorageService: Getting accounts from IndexedDB')
+      const accounts = await IndexedDBService.getAccounts(masterPassword)
+      console.log('StorageService: Retrieved accounts:', accounts.length)
+      return accounts
     } catch (error) {
-      console.error('Failed to get accounts from storage:', error)
+      console.error('Failed to get accounts from IndexedDB:', error)
       return []
     }
   }
 
+  /**
+   * 保存所有账号
+   */
   static async saveAccounts(accounts: Account[], masterPassword?: string): Promise<void> {
     try {
-      const settings = await this.getSettings()
-
-      if (settings.encryptionEnabled && masterPassword) {
-        // 加密并保存账号数据
-        const dataToEncrypt = JSON.stringify(accounts)
-        const encryptedData = await CryptoService.encrypt(dataToEncrypt, masterPassword)
-
-        await chrome.storage.sync.set({
-          [this.ENCRYPTED_ACCOUNTS_KEY]: encryptedData
-        })
-
-        // 清除未加密的数据
-        await chrome.storage.sync.remove([this.ACCOUNTS_KEY])
-      } else {
-        // 保存未加密的账号数据
-        await chrome.storage.sync.set({
-          [this.ACCOUNTS_KEY]: accounts
-        })
-
-        // 清除加密的数据
-        await chrome.storage.sync.remove([this.ENCRYPTED_ACCOUNTS_KEY])
-      }
+      console.log('StorageService: Saving accounts to IndexedDB, count:', accounts.length)
+      await IndexedDBService.saveAccounts(accounts, masterPassword)
+      console.log('StorageService: Accounts saved successfully')
     } catch (error) {
-      console.error('Failed to save accounts to storage:', error)
+      console.error('Failed to save accounts to IndexedDB:', error)
       throw error
     }
   }
 
+  /**
+   * 获取设置
+   */
   static async getSettings(): Promise<Settings> {
     try {
-      const result = await chrome.storage.sync.get([this.SETTINGS_KEY])
-      return result[this.SETTINGS_KEY] || {
-        autoDetection: true,
-        autoSubmit: false,
-        encryptionEnabled: false
-      }
+      const settings = await IndexedDBService.getSettings()
+      console.log('StorageService: Retrieved settings:', settings)
+      return settings
     } catch (error) {
-      console.error('Failed to get settings from storage:', error)
+      console.error('Failed to get settings from IndexedDB:', error)
       return {
         autoDetection: true,
         autoSubmit: false,
@@ -80,23 +49,31 @@ export class StorageService {
     }
   }
 
+  /**
+   * 保存设置
+   */
   static async saveSettings(settings: Settings): Promise<void> {
     try {
-      await chrome.storage.sync.set({
-        [this.SETTINGS_KEY]: settings
-      })
+      console.log('StorageService: Saving settings to IndexedDB:', settings)
+      await IndexedDBService.saveSettings(settings)
+      console.log('StorageService: Settings saved successfully')
     } catch (error) {
-      console.error('Failed to save settings to storage:', error)
+      console.error('Failed to save settings to IndexedDB:', error)
       throw error
     }
   }
 
-  static async clearAll(): Promise<void> {
+  /**
+   * 检查是否已设置主密码
+   */
+  static async hasMasterPassword(): Promise<boolean> {
     try {
-      await chrome.storage.sync.clear()
+      const hasPassword = await IndexedDBService.hasMasterPassword()
+      console.log('StorageService: Has master password:', hasPassword)
+      return hasPassword
     } catch (error) {
-      console.error('Failed to clear storage:', error)
-      throw error
+      console.error('Failed to check master password:', error)
+      return false
     }
   }
 
@@ -105,10 +82,9 @@ export class StorageService {
    */
   static async setMasterPassword(password: string): Promise<void> {
     try {
-      const passwordHash = await CryptoService.hash(password)
-      await chrome.storage.sync.set({
-        [this.MASTER_PASSWORD_HASH_KEY]: passwordHash
-      })
+      console.log('StorageService: Setting master password')
+      await IndexedDBService.setMasterPassword(password)
+      console.log('StorageService: Master password set successfully')
     } catch (error) {
       console.error('Failed to set master password:', error)
       throw error
@@ -120,15 +96,9 @@ export class StorageService {
    */
   static async verifyMasterPassword(password: string): Promise<boolean> {
     try {
-      const result = await chrome.storage.sync.get([this.MASTER_PASSWORD_HASH_KEY])
-      const storedHash = result[this.MASTER_PASSWORD_HASH_KEY]
-
-      if (!storedHash) {
-        return false
-      }
-
-      const passwordHash = await CryptoService.hash(password)
-      return passwordHash === storedHash
+      const isValid = await IndexedDBService.verifyMasterPassword(password)
+      console.log('StorageService: Master password verification:', isValid)
+      return isValid
     } catch (error) {
       console.error('Failed to verify master password:', error)
       return false
@@ -136,15 +106,16 @@ export class StorageService {
   }
 
   /**
-   * 检查是否已设置主密码
+   * 清除主密码
    */
-  static async hasMasterPassword(): Promise<boolean> {
+  static async clearMasterPassword(): Promise<void> {
     try {
-      const result = await chrome.storage.sync.get([this.MASTER_PASSWORD_HASH_KEY])
-      return !!result[this.MASTER_PASSWORD_HASH_KEY]
+      console.log('StorageService: Clearing master password')
+      await IndexedDBService.clearMasterPassword()
+      console.log('StorageService: Master password cleared successfully')
     } catch (error) {
-      console.error('Failed to check master password:', error)
-      return false
+      console.error('Failed to clear master password:', error)
+      throw error
     }
   }
 
@@ -153,6 +124,8 @@ export class StorageService {
    */
   static async enableEncryption(masterPassword: string): Promise<void> {
     try {
+      console.log('StorageService: Enabling encryption')
+
       // 获取现有的未加密账号
       const accounts = await this.getAccounts()
 
@@ -166,6 +139,8 @@ export class StorageService {
 
       // 保存加密的账号数据
       await this.saveAccounts(accounts, masterPassword)
+
+      console.log('StorageService: Encryption enabled successfully')
     } catch (error) {
       console.error('Failed to enable encryption:', error)
       throw error
@@ -177,6 +152,8 @@ export class StorageService {
    */
   static async disableEncryption(masterPassword: string): Promise<void> {
     try {
+      console.log('StorageService: Disabling encryption')
+
       // 获取加密的账号数据
       const accounts = await this.getAccounts(masterPassword)
 
@@ -188,13 +165,81 @@ export class StorageService {
       // 保存未加密的账号数据
       await this.saveAccounts(accounts)
 
-      // 清除主密码和加密数据
-      await chrome.storage.sync.remove([
-        this.MASTER_PASSWORD_HASH_KEY,
-        this.ENCRYPTED_ACCOUNTS_KEY
-      ])
+      // 清除主密码
+      await this.clearMasterPassword()
+
+      console.log('StorageService: Encryption disabled successfully')
     } catch (error) {
       console.error('Failed to disable encryption:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 添加单个账号
+   */
+  static async addAccount(account: Account, masterPassword?: string): Promise<void> {
+    try {
+      console.log('StorageService: Adding account to IndexedDB:', account.id)
+      await IndexedDBService.addAccount(account, masterPassword)
+      console.log('StorageService: Account added successfully')
+    } catch (error) {
+      console.error('Failed to add account to IndexedDB:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 更新账号
+   */
+  static async updateAccount(account: Account, masterPassword?: string): Promise<void> {
+    try {
+      console.log('StorageService: Updating account in IndexedDB:', account.id)
+      await IndexedDBService.updateAccount(account, masterPassword)
+      console.log('StorageService: Account updated successfully')
+    } catch (error) {
+      console.error('Failed to update account in IndexedDB:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 删除账号
+   */
+  static async deleteAccount(id: string): Promise<void> {
+    try {
+      console.log('StorageService: Deleting account from IndexedDB:', id)
+      await IndexedDBService.deleteAccount(id)
+      console.log('StorageService: Account deleted successfully')
+    } catch (error) {
+      console.error('Failed to delete account from IndexedDB:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 清除所有数据
+   */
+  static async clearAll(): Promise<void> {
+    try {
+      console.log('StorageService: Clearing all data')
+
+      // 清除所有账号
+      await this.saveAccounts([])
+
+      // 重置设置
+      await this.saveSettings({
+        autoDetection: true,
+        autoSubmit: false,
+        encryptionEnabled: false
+      })
+
+      // 清除主密码
+      await this.clearMasterPassword()
+
+      console.log('StorageService: All data cleared successfully')
+    } catch (error) {
+      console.error('Failed to clear all data:', error)
       throw error
     }
   }
