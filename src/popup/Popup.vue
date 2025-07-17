@@ -23,34 +23,46 @@
     </div>
 
     <div v-else class="accounts-section">
+      <!-- 顶部操作栏 -->
+      <!-- <div class="top-actions">
+        <button @click="showAddForm = true" class="add-btn">+ 添加账号</button>
+        <button @click="forceRefresh" class="refresh-btn" title="刷新账号列表">🔄</button>
+      </div> -->
+
       <!-- 调试信息 -->
-      <div class="debug-info" style="background: #f0f0f0; padding: 8px; margin-bottom: 8px; font-size: 12px;">
-        Store accounts: {{ accounts.length }} |
-        Filtered accounts: {{ filteredAccounts.length }} |
-        Search: "{{ searchQuery }}"
+      <div class="debug-info" style="background: #f0f0f0; padding: 4px 8px; margin-bottom: 8px; font-size: 11px; border-radius: 4px;">
+        账号: {{ accounts.length }} | 过滤: {{ filteredAccounts.length }} | 搜索: "{{ searchQuery }}"
       </div>
 
       <div v-if="filteredAccounts.length === 0" class="no-accounts">
-        <p>暂无账号</p>
-        <button @click="showAddForm = true" class="add-btn">添加账号</button>
-        <button @click="forceRefresh" class="add-btn" style="margin-left: 8px;">刷新</button>
+        <p>暂无账号数据</p>
+        <p class="hint">点击下方"添加账号"按钮开始使用</p>
       </div>
       
       <div v-else class="accounts-list">
-        <div 
-          v-for="account in filteredAccounts" 
-          :key="account.id"
-          class="account-item"
-          @click="selectAccount(account)"
-        >
-          <div class="account-info">
-            <div class="account-name">{{ account.name }}</div>
-            <div class="account-username">{{ account.username }}</div>
-            <div v-if="account.group" class="account-group">{{ account.group }}</div>
+        <!-- 按分组展示账号 -->
+        <div v-for="group in groupedAccounts" :key="group.name" class="account-group-section">
+          <div class="group-header">
+            <span class="group-name">{{ group.name }}</span>
+            <span class="group-count">({{ group.accounts.length }})</span>
           </div>
-          <div class="account-actions">
-            <button @click.stop="editAccount(account)" class="edit-btn">✏️</button>
-            <button @click.stop="deleteAccount(account.id)" class="delete-btn">🗑️</button>
+          <div class="group-accounts">
+            <div
+              v-for="account in group.accounts"
+              :key="account.id"
+              class="account-item"
+              @click="selectAccount(account)"
+            >
+              <div class="account-info">
+                <div class="account-name">{{ account.name }}</div>
+                <div class="account-username">{{ account.username }}</div>
+                <div v-if="account.domain" class="account-domain">{{ account.domain }}</div>
+              </div>
+              <div class="account-actions">
+                <button @click.stop="editAccount(account)" class="edit-btn" title="编辑">✏️</button>
+                <button @click.stop="deleteAccount(account.id)" class="delete-btn" title="删除">🗑️</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -151,8 +163,36 @@ const filteredAccounts = computed(() => {
   return accounts.value.filter(account =>
     account.name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
     account.username.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-    (account.group && account.group.toLowerCase().includes(searchQuery.value.toLowerCase()))
+    (account.group && account.group.toLowerCase().includes(searchQuery.value.toLowerCase())) ||
+    (account.domain && account.domain.toLowerCase().includes(searchQuery.value.toLowerCase()))
   )
+})
+
+// 按分组整理账号
+const groupedAccounts = computed(() => {
+  const groups = new Map<string, any[]>()
+
+  // 将账号按分组分类
+  filteredAccounts.value.forEach(account => {
+    const groupName = account.group || '未分组'
+    if (!groups.has(groupName)) {
+      groups.set(groupName, [])
+    }
+    groups.get(groupName)!.push(account)
+  })
+
+  // 转换为数组并排序
+  const result = Array.from(groups.entries()).map(([name, accounts]) => ({
+    name,
+    accounts: accounts.sort((a, b) => a.name.localeCompare(b.name))
+  }))
+
+  // 分组排序：未分组放最后，其他按名称排序
+  return result.sort((a, b) => {
+    if (a.name === '未分组') return 1
+    if (b.name === '未分组') return -1
+    return a.name.localeCompare(b.name)
+  })
 })
 
 const selectAccount = async (account: Account) => {
@@ -375,15 +415,81 @@ onMounted(() => {
   background-color: #e0a800;
 }
 
+.top-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e9ecef;
+  background: #f8f9fa;
+}
+
+.refresh-btn {
+  background: #6c757d;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 8px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background-color 0.2s;
+  min-width: 32px;
+  height: 32px;
+}
+
+.refresh-btn:hover {
+  background: #5a6268;
+}
+
 .no-accounts {
   text-align: center;
   padding: 32px 16px;
   color: #666;
 }
 
+.no-accounts .hint {
+  font-size: 12px;
+  color: #adb5bd;
+  margin-top: 8px;
+}
+
 .accounts-list {
   max-height: 300px;
   overflow-y: auto;
+}
+
+.account-group-section {
+  margin-bottom: 16px;
+}
+
+.account-group-section:last-child {
+  margin-bottom: 0;
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  background: #e9ecef;
+  border-radius: 4px;
+  margin-bottom: 8px;
+  font-weight: 500;
+  font-size: 14px;
+  color: #495057;
+}
+
+.group-name {
+  flex: 1;
+}
+
+.group-count {
+  font-size: 12px;
+  color: #6c757d;
+  font-weight: normal;
+}
+
+.group-accounts {
+  padding-left: 8px;
 }
 
 .account-item {
@@ -416,6 +522,16 @@ onMounted(() => {
   font-size: 12px;
   color: #666;
   margin-bottom: 2px;
+}
+
+.account-domain {
+  font-size: 11px;
+  color: #28a745;
+  background-color: #d4edda;
+  padding: 2px 6px;
+  border-radius: 3px;
+  display: inline-block;
+  border: 1px solid #c3e6cb;
 }
 
 .account-group {
